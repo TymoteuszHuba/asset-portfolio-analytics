@@ -9,7 +9,7 @@ Real-world analyses for example of orders from platform like Upwork show that th
 Main target is to define strategic goals of the project from the end user's perspective.
 
 * **BR-01 Wealth consolidation:** The system must enable centralization of data on all assets held (multiple brokers, multiple accounts) in one place. 
-    > **Measure of success:** The Stakeholders sees aggregated positions from all accounts on one dashboard and the time needed for manual data compilation drops from several hours to zero (full automation).
+    > **Measure of success:** The Investor sees aggregated positions from all accounts on one dashboard and the time needed for manual data compilation drops from several hours to zero (full automation).
 * **BR-02 Valuation history:** The system must allow you to check the total portfolio value for any date in the past (historical holdings).
     > **Measure of success:** Selecting any past date on the time slider in Apache Superset generates the correct portfolio valuation (AUM) for that day in under 500ms.
 * **BR-03 Single reporting currency:** Regardless of the asset's purchase currency (USD, EUR, GBP, etc) the final result must be presented in the investor's base currency (EUR). 
@@ -28,9 +28,77 @@ Main target is to define strategic goals of the project from the end user's pers
     > **Validation method:** Database check to ensure that for each transaction in a currency other than EUR, the system can perfectly match the exchange rate from the day.
 * **FR-04 Holiday handling:** For days when exchanges are closed (weekends, holidays), the system must automatically assign the assets the last known market price from the previous business day (Last available price - LAP).
     > **Validation method:** A test of the SQL query to the database shows that the date sequence in the portfolio valuation time series has no gaps and the prices for Saturdays and Sundays are identical to the prices from Friday.
-* **FR-05 Incremental upsert:** Before querying the FMP API, the Airflow data pipeline must check the current database state. Only records newer than max_price in the warehouse are retrieved.
+* **FR-05 Incremental upsert:** Before querying the FMP API, the Airflow data pipeline must check the current database state. Only records newer than price_date in the warehouse are retrieved.
     > **Validation method:** Re-running the Airflow pipeline for the same day does not generate new HTTP requests to the FMP API and does not duplicate rows in the database.
-* **FR-06 Adjustment for stocks-splits:** The system must consider the stock split ratio (split) provided by the FMP API so that the historical closing price and position volume are retroactively adjusted.
+* **FR-06 Adjustment for stock-splits:** The system must consider the stock splits ratio (split) provided by the FMP API so that the historical closing price and position volume are retroactively adjusted.
     > **Validation method:** Verification that after a split (e.g., 1:4), the historical unit purchase cost decreases and the number of shares held increases, maintaining a constant AUM.
 * **FR-07 Automatic isolation of incorrect data:** Broker records containing critical errors (missing price, negative volume, unknown ticker) can't stop the Airflow pipeline. Such data must be automatically sent to a separate table (waiting room) for verification.
-    > **Validation method:** The integration test loads an intentionally corrupted CSV file. The Airflow pipeline completes with a success status, valid transactions are placed in the core database and corrupt records are isolated in the error table with a description of the cause.
+    > **Validation method:** The integration test loads an intentionally broken CSV file. The Airflow pipeline completes with a success status, valid transactions are placed in the core database and corrupt records are isolated in the error table with a description of the cause.
+
+## 4. User Stories & Acceptance Criteria 
+### US-01: Asset consolidation and single reporting currency
+**Maps requirements:** BR-01, BR-03, FR-01, FR-03
+> **As an** investor holding assets in multiple currencies (USD, GBP),
+> **I want to** upload my multi-broker transaction files into a single system,
+> **So that** I can see my entire net worth calculated uniformly in EUR without manual conversions.
+#### Acceptance Criteria:
+* **Scenario: Successful multi-currency transaction ingestion**
+    * **GIVEN** The investor has a stock purchase transaction in USD dated May 15th. The Forex API has retrieved the USD/EUR exchange rate for that day.
+    * **WHEN** the ETL pipeline processes this transaction.
+    * **THEN** the transaction value is correctly converted to EUR using the correct rate. The resulting record is saved in the general ledger with a precision of 4 decimal places in the database.
+
+### US-02: Automatic stock price download
+**Maps requirements:** BR-01, FR-02
+> **As an** investor managing a diverse portfolio,
+> **I want** the system to automatically fetch daily closing prices for all my active stocks at the end of each trading day,
+> **So that** I don't have to manually look up and log market data to know what my assets are worth.
+#### Acceptance Criteria:
+* **Scenario: Successful End-of-Day price ingestion**
+    * **GIVEN** The stock exchange has ended the session for the assets in the investor's portfolio.
+    * **WHEN** the orchestrator starts the daily market data download pipeline.
+    * **THEN** the system sends a query to the FMP API and retrieves the current closing price. The price is saved in the database with a timestamp reflecting the given trading day.
+
+### US-03: Continuous valuation history and holiday handling
+**Maps requirements:** BR-02, FR-04
+> **As an** investor analyzing portfolio performance,
+> **I want to** see a continuous time-series chart of my asset valuation,
+> **So that** I can evaluate my net worth on any given day, including weekends and market holidays.
+#### Acceptance Criteria:
+* **Scenario: Portfolio valuation on non-trading days**
+    * **GIVEN** The stock market was closed on Saturday and Sunday. The last known closing price of the asset on Friday was for example `150.00 EUR`.
+    * **WHEN** the system runs the daily AUM calculation process for the entire week. 
+    * **THEN** for Saturday and Sunday, the system automatically assigns a price of `150.00 EUR`. The resulting time series in the analytical layer does not contain any gaps in the dates.
+
+
+### US-04: Automatic data isolation
+**Maps requirements:** BR-05, FR-07
+> **As a** Data Analyst / System Owner,
+> **I want** corrupted or invalid transaction rows to be automatically isolated rather than crashing the entire ingestion process,
+> **So that** valid data is successfully processed without interruption, and I can inspect the errors later.
+#### Acceptance Criteria:
+* **Scenario: Processing a broker file with partial data corruption**
+    * **GIVEN** The investor uploads a CSV file containing 98 valid rows and 2 rows with critical errors (e.g., a negative price or missing asset identification code). The target tables are empty.
+    * **WHEN** the data ingestion pipeline in the orchestrator is launched. 
+    * **THEN** the pipeline exits with a success/warning status (it doesn't crash the entire process). 98 valid rows are sent to the target table in the Core layer. 2 corrupted records are isolated in the error table with a timestamp and the error code.
+
+### US-05: API optimization and incremental
+**Maps requirements:** BR-05, FR-05
+> **As a** System Administrator utilizing a free API tier,
+> **I want** the daily market data pipeline to fetch only missing EOD historical prices,
+> **So that** the system remains operational and never exhausts the strict 250-requests/day limit.
+#### Acceptance Criteria:
+* **Scenario: Incremental upsert**
+    * **GIVEN** The database already has fetched and validated stock prices up to day $T-1$.
+    * **WHEN** the Airflow pipeline starts automatically for day $T$ (or is restarted manually by the administrator).
+    * **THEN** the system queries the FMP API only for records from day $T$. Historical data already in the database is not fetched again from the network, saving the HTTP request limit.
+
+### US-06: Corporate shares (Split) handling
+**Maps requirements:** BR-04, FR-06
+> **As an** Investor tracking asset performance,
+> **I want** the system to automatically adjust historical prices and quantities when a stock split occurs,
+> **So that** my historical charts do not show artificial drops in wealth.
+#### Acceptance Criteria:
+* **Scenario: Processing a stock split event**
+    * **GIVEN** Before the split, the investor held 10 shares of company X with a market price of EUR 400.00 each (Total position value = EUR 4,000.00).
+    * **WHEN** the company performs a stock split (split) in a 1:4 ratio.
+    * **THEN** the system automatically recalculates the position, increasing the number of shares to 40 and reducing the historical price to EUR 100.00. The total value of the position (AUM) before and after the operation remains unchanged and is exactly `4000.00 EUR`.
