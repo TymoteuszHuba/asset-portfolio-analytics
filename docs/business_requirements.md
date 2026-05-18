@@ -102,3 +102,55 @@ Main target is to define strategic goals of the project from the end user's pers
     * **GIVEN** Before the split, the investor held 10 shares of company X with a market price of EUR 400.00 each (Total position value = EUR 4,000.00).
     * **WHEN** the company performs a stock split (split) in a 1:4 ratio.
     * **THEN** the system automatically recalculates the position, increasing the number of shares to 40 and reducing the historical price to EUR 100.00. The total value of the position (AUM) before and after the operation remains unchanged and is exactly `4000.00 EUR`.
+
+
+
+## 5. Use Cases
+
+### Use Case 1: Automatic, incremental market data update
+* **Main actor:** Airflow Scheduler (System)
+* **Supporting actors:** Financial Modeling Prep (FMP) API
+* **Main condition:** The internal market database contains historical price entries up to day $T-1$.
+* **Main scenario:**
+    1. The system automatically triggers the data pipeline after the financial markets close (e.g., at 11:00 PM UTC).
+    2. The system queries the internal database for the maximum available price date for all active instruments in the portfolio.
+    3. The system identifies that data for day $T$ is missing.
+    4. The system sends an incremental request (Delta Load) to the financial API for closing prices and FX rates for day $T$.
+    5. The financial API returns a valid data payload.
+    6. The system performs forward-fill interpolation (LAP) – if day $T$ is a weekday, it saves the price; if it is a weekend/holiday, it copies the closing price from the last available business day (Friday).
+    7. The processed data is safely stored in the **Market Price Repository**.
+* **Alternative scenario (Data is current):**
+    * In step 3, the system discovers that data for day $T$ is already present in the database. The pipeline terminates gracefully without querying the external API, effectively protecting the free plan limits.
+
+---
+
+### Use Case 2: Importing transaction history with data quality support
+* **Main actor:** Investor
+* **Supporting actors:** Ingestion Pipeline, Storage System
+* **Main condition:** The investor uploads a broker-generated transaction file to the dedicated input directory.
+* **Main scenario:**
+    1. The investor initiates the file import process via the ingestion pipeline.
+    2. The system executes the data parser and verifies structural integrity (type validation, missing fields check).
+    3. The system unifies schema column names and converts transaction types to the internal standard (e.g., maps local broker terms to generic `BUY`, `SELL`, `DIVIDEND`).
+    4. All records pass the quality validation checks.
+    5. The system loads the transactions into the transaction history and automatically calculates the adjusted Cost Basis.
+* **Alternative scenario (Detection of broken records):**
+    * In step 3, the data parser detects that a few rows contain critical anomalies, such as negative volumes or missing currency codes.
+    * The system **does not abort** the entire batch processing and does not rollback the operation for the remaining valid transactions.
+    * The valid transactions are successfully transferred to the transaction history.
+    * The broken records are isolated and extracted into the error log, stamped with an ingestion timestamp and a specific error reason code.
+    * The system terminates with a status of "Success with Warnings" and generates an actionable log report for the Investor.
+
+---
+
+### Use Case 3: Multi-currency portfolio performance analysis
+* **Main actor:** Investor (End User)
+* **Supporting actors:** Analytical/BI Layer, Data Warehouse Analytics Mart
+* **Main condition:** The core data warehouse layers have correctly calculated historical positions and mapped all multi-currency transactions to the base currency (EUR).
+* **Main scenario:**
+    1. The investor logs into the BI analytical panel and opens the main portfolio dashboard.
+    2. The investor sets the reporting currency filter to `EUR` and selects a historical timeframe (e.g., "Last 3 Years").
+    3. The BI tool transmits an optimized query to the analytical views exposed by the data warehouse.
+    4. The data warehouse executes a high-performance join operation combining historical shares from the transaction ledger with asset pricing history and daily FX rates for the selected timeframe.
+    5. The dashboard generates a real-time, interactive line chart displaying the Assets Under Management (AUM) trend and the cumulative net return line.
+    6. The investor views the true net investment result, which automatically subtracts operational costs (retrieved from transaction fees) and eliminates artificial portfolio fluctuations caused by volatile exchange rates (FX impact isolation).
