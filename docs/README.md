@@ -22,5 +22,4 @@ This platform automates the End-of-Day (EOD) ingestion of market and currency da
 
 ## Documentation Index
 All technical and business specifications are strictly maintained within the `docs/` repository. Project will follow *Documentation as Code* paradigm.
-
 *For more details please explore the `docs/` diretory to review the full engineering blueprint.*
