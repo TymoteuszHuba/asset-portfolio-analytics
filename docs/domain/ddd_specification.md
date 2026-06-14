@@ -9,20 +9,20 @@ To maintain conceptual integrity and avoid mixing technical logic (e.g., parsing
 
 ```mermaid
 graph TD
-    subgraph Fetch Context
+    subgraph FC ["Fetch Context"]
         A[Parse CSV] --> B[Validate Schema]
         B --> C{Is Data Valid?}
         C -->|Yes| D[Emit Transaction]
         C -->|No| E[Quarantine Row]
     end
 
-    subgraph Market Data Context
+    subgraph MDC ["Market Data Context"]
         F[FMP API Client] --> G[Fetch EOD Prices]
         F --> H[Fetch FX Rates]
         I[Incremental Loader] -->|Optimize Quota| F
     end
 
-    subgraph Accounting and Valuation Context
+    subgraph AVC ["Accounting and Valuation Context"]
         D -->|Ledger Entry| J[Immutable Ledger]
         G -->|Asset Prices| K[Portfolio Valuation Engine]
         H -->|FX Rates| K
@@ -30,12 +30,12 @@ graph TD
         K --> L[Historical AUM Time Series]
     end
 
-    Fetch Context -->|Upstream / Supplier| Accounting and Valuation Context
-    Market Data Context -->|Upstream / Supplier| Accounting and Valuation Context
+    FC -->|Upstream / Supplier| AVC
+    MDC -->|Upstream / Supplier| AVC
 
-    style Fetch Context fill:#f9f,stroke:#333,stroke-width:2px
-    style Market Data Context fill:#bbf,stroke:#333,stroke-width:2px
-    style Accounting and Valuation Context fill:#bfb,stroke:#333,stroke-width:2px
+    style FC fill:#f9f,stroke:#333,stroke-width:2px
+    style MDC fill:#bbf,stroke:#333,stroke-width:2px
+    style AVC fill:#bfb,stroke:#333,stroke-width:2px
 ```
 
 ### 1.1. Fetch Context
