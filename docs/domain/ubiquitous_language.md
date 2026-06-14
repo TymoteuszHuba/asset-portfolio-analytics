@@ -86,7 +86,7 @@ Source: [Business Requirements](../business_requirements.md)
 * **Broker file:** A broker-generated export file (typically CSV) with raw transaction rows. Column names and formats differ per broker.
     > **Maps to:** FR-01, UC-2
 
-* **Ingestion pipeline:** The Airflow ETL process that reads broker files, validates data, normalizes schema and loads valid records into the immutable ledger.
+* **Fetch pipeline:** The Airflow ETL process that reads broker files, validates data, normalizes schema and loads valid records into the immutable ledger.
     > **Maps to:** FR-01, FR-07, UC-2
 
 * **Delta load:** Before calling the FMP API, the pipeline checks the latest stored `price_date` and fetches only missing records. Avoids duplicate API calls and protects the daily request limit.
