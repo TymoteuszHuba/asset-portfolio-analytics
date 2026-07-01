@@ -49,7 +49,7 @@ Responsible for integration with external financial data providers (FMP API) and
 *   **Business Impact:** API quota protection (BR-05) – optimization and caching of network requests protect the free API tier from exhaustion.
 
 ### 1.3. Accounting and Valuation Context
-The core of the system. Responsible for maintaining the Immutable Ledger, calculating historical cost bases (Cost Basis), handling corporate actions (splits), and generating daily portfolio valuations (Assets Under Management - AUM) in the base currency (EUR).
+The core of the system. Responsible for maintaining the Immutable Ledger, calculating historical cost bases (Cost Basis), handling corporate actions (splits) and generating daily portfolio valuations (Assets Under Management - AUM) in the base currency (EUR).
 *   **Boundaries:** Internal database tables and transformation procedures in the `core` and `presentation` schemas.
 *   **Business Impact:** Analytical precision (BR-04, BR-02, BR-03) – calculating net returns without currency distortions.
 
@@ -90,7 +90,7 @@ Context relationships are built on the **Customer-Supplier** pattern:
 +------------------------------------------+
 ```
 
-*   **BrokerReport (Entity):** Represents a specific file uploaded by the user. It has a unique identifier, name, source broker info, and processing status.
+*   **BrokerReport (Entity):** Represents a specific file uploaded by the user. It has a unique identifier, name, source broker info and processing status.
 *   **QuarantineRecord (Value Object):** Represents a single row from the input file that failed technical or business validation. It is immutable and contains the exact error details and a dump of the original raw line.
 
 ### 3.2. Market Data Context
