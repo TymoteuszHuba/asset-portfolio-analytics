@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Data Warehouse: PostgreSQL Database Container
   # ---------------------------------------------------------------------------
@@ -37,7 +35,6 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       AIRFLOW__WEBSERVER__SECRET_KEY: portfolio_airflow_secret_key_2026
-      AIRFLOW__CORE__FERNET_KEY: 46X7A82379A5F19655D119A208573D54=
       FMP_API_KEY: ${FMP_API_KEY:-demo}
     ports:
       - "8080:8080"

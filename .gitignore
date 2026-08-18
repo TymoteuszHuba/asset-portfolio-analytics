@@ -38,7 +38,17 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Docker data volumes (zabezpieczenie na przyszłość)
+# Airflow & Application Runtime Logs
+logs/
+*.log
+*.db
+
+# Data Storage Landing Zone (Ignore CSVs, keep folder via .gitkeep)
+input_data/*.csv
+input_data/*.json
+!input_data/.gitkeep
+
+# Docker data volumes
 postgres_data/
 superset_data/
 
