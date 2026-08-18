@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  # Data Warehouse: PostgreSQL Database Container
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: portfolio_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: portfolio_user
+      POSTGRES_PASSWORD: portfolio_password
+      POSTGRES_DB: portfolio_dwh
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U portfolio_user -d portfolio_dwh"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  
+  # Data Pipeline Orchestrator: Apache Airflow (Standalone Mode)
+  # ---------------------------------------------------------------------------
+  airflow:
+    image: apache/airflow:2.8.1-python3.10
+    container_name: portfolio_airflow
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__WEBSERVER__SECRET_KEY: portfolio_airflow_secret_key_2026
+      AIRFLOW__CORE__FERNET_KEY: 46X7A82379A5F19655D119A208573D54=
+      FMP_API_KEY: ${FMP_API_KEY:-demo}
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./input_data:/opt/airflow/input_data
+      - ./logs:/opt/airflow/logs
+      - ./config:/opt/airflow/config
+      - ./requirements.txt:/opt/airflow/requirements.txt
+    command: standalone
+
+  
+  # Business Intelligence: Apache Superset
+  # ---------------------------------------------------------------------------
+  superset:
+    image: apache/superset:3.0.2
+    container_name: portfolio_superset
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SUPERSET_SECRET_KEY: portfolio_superset_secret_key_2026
+    ports:
+      - "8088:8088"
+    volumes:
+      - superset_data:/app/superset_home
+
+volumes:
+  postgres_data:
+  superset_data:

@@ -1,0 +1,13 @@
+# Python Dependencies for Multi-Asset Portfolio Analytics
+
+# Data Processing & ETL
+pandas>=2.0.0
+requests>=2.31.0
+pydantic>=2.5.0
+
+# Database Connectivity
+psycopg2-binary>=2.9.9
+
+# Testing & Quality Assurance
+pytest>=7.4.0
+requests-mock>=1.11.0
