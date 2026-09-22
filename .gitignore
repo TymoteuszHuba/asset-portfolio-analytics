@@ -43,9 +43,8 @@ logs/
 *.log
 *.db
 
-# Data Storage Landing Zone (Ignore CSVs, keep folder via .gitkeep)
-input_data/*.csv
-input_data/*.json
+# Data Storage Landing Zone (Ignore all data files in input_data, keep folder via .gitkeep)
+input_data/*
 !input_data/.gitkeep
 
 # Docker data volumes
