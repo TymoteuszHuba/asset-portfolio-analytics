@@ -1,0 +1,11 @@
+transaction_date,ticker,type,quantity,unit_price,currency,operational_cost,notes
+2026-01-10,AAPL,BUY,10.00000000,185.5000,USD,1.5000,Initial Apple purchase
+2026-01-15,VWCE.DE,BUY,25.00000000,112.3000,EUR,0.0000,Vanguard ETF purchase
+2026-02-01,MSFT,BUY,5.00000000,405.2000,USD,2.0000,Microsoft stock purchase
+2026-02-15,AAPL,BUY,-5.00000000,190.0000,USD,1.0000,INVALID: Negative quantity test
+2026-03-01,TSLA,BUY,15.00000000,200.0000,USD,2.5000,Tesla stock purchase
+2026-03-10,AAPL,DIVIDEND,10.00000000,0.2400,USD,0.0000,Dividend payment
+2026-03-15,MSFT,INVALID_TYPE,2.00000000,410.0000,USD,1.0000,INVALID: Unknown transaction type test
+2026-04-05,VWCE.DE,BUY,10.00000000,115.8000,EUR,1.0000,Additional ETF accumulation
+2026-04-20,TSLA,SELL,5.00000000,220.0000,USD,2.5000,Partial Tesla profit take
+2026-05-01,AAPL,BUY,5.00000000,-10.0000,USD,1.0000,INVALID: Negative unit price test
