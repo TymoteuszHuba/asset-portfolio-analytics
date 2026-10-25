@@ -82,7 +82,8 @@ multi-asset-porfolio-analytics/
 │           ├── test_lap_interpolator.py# Integration test for price gap filling
 │           └── test_valuation_engine.py# Unit & integration tests for valuation engine
 ├── superset/
-│   └── setup_superset.py           # Automated setup script for Superset DB connection & datasets
+│   ├── setup_superset.py           # Automated setup: DB connection, datasets, 8 charts & dashboard
+│   └── test_superset_setup.py      # Verification tests for Superset configuration (19 assertions)
 └── input_data/
     └── .gitkeep                    # Folder where user places CSV reports (data files git-ignored)
 ```
@@ -100,9 +101,14 @@ The PostgreSQL database is organized into 3 clear layers:
    * `core.asset_prices`: Daily stock/ETF closing prices (with gap-filling flags).
    * `core.fx_rates`: Daily currency exchange rates.
    * `core.broker_reports`: Status of processed CSV report files.
-3. **`presentation`**: Ready-to-use tables for Superset dashboards:
+3. **`presentation`**: Ready-to-use tables and analytical views for Superset dashboards:
    * `presentation.daily_portfolio_metrics`: Daily total portfolio value, invested cost, returns, and PnL.
    * `presentation.daily_holdings`: Daily position details for each stock/ETF held.
+   * `presentation.v_quarterly_portfolio_metrics`: Quarterly aggregated valuations, PnL, and percentage returns.
+   * `presentation.v_quarterly_dividends`: Quarterly cashflow metrics from broker dividend payments.
+   * `presentation.v_top_dividend_tickers`: Ranking of stocks generating highest cumulative dividend income.
+   * `presentation.v_currency_exposure`: Asset valuation split by currency/regional exposure (USD vs EUR).
+   * `presentation.v_latest_holdings`: Latest portfolio holdings snapshot at market-priced valuation date.
 
 ---
 
@@ -129,11 +135,20 @@ Access points:
 - **Superset UI**: [http://localhost:8088](http://localhost:8088) (`admin` / `admin`)
 - **PostgreSQL**: `localhost:5432` (`portfolio_dwh`)
 
-### 4. Initialize Superset BI Connection & Datasets
-Run the automated setup script to connect Superset to PostgreSQL and register presentation datasets:
+### 4. Initialize Superset BI Connection, Datasets, Charts & Dashboard
+Run the automated setup script to connect Superset to PostgreSQL, register presentation datasets,
+create 8 analytical charts and assemble them into the **Portfolio 360 Analytics** dashboard (2 tabs):
 ```bash
 docker exec -i portfolio_superset python < superset/setup_superset.py
 ```
+
+Open the dashboard at: [http://localhost:8088/superset/dashboard/1/](http://localhost:8088/superset/dashboard/1/)
+
+#### Verify the setup (optional)
+```bash
+docker exec -i portfolio_superset python < superset/test_superset_setup.py
+```
+Expected output: `Results: 33/33 tests passed, 0 failed.`
 
 ### 5. Run Tests
 To run all automated tests inside the Docker container:

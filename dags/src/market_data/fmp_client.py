@@ -81,23 +81,73 @@ class FMPApiClient:
             "to": end_date.strftime("%Y-%m-%d"),
         }
         
-        data = self._get(endpoint, params)
-        historical = data.get("historical", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
-        
-        normalized_records = []
-        for item in historical:
-            price_date_str = item.get("date")
-            close_price_val = item.get("close")
+        try:
+            data = self._get(endpoint, params)
+            historical = data.get("historical", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
             
-            if price_date_str and close_price_val is not None:
-                normalized_records.append({
-                    "ticker": symbol.upper(),
-                    "price_date": date.fromisoformat(price_date_str),
-                    "close_price": Decimal(str(close_price_val)),
-                    "currency": "USD",
-                })
+            normalized_records = []
+            for item in historical:
+                price_date_str = item.get("date")
+                close_price_val = item.get("close")
                 
-        return normalized_records
+                if price_date_str and close_price_val is not None:
+                    normalized_records.append({
+                        "ticker": symbol.upper(),
+                        "price_date": date.fromisoformat(price_date_str),
+                        "close_price": Decimal(str(close_price_val)),
+                        "currency": "USD",
+                    })
+                    
+            return normalized_records
+        except MarketDataAPIError as err:
+            if "402" in str(err):
+                logger.warning(f"FMP requires paid subscription for '{symbol}'. Falling back to Yahoo Finance public API...")
+                return self._fetch_yahoo_prices_fallback(symbol, start_date, end_date)
+            raise
+
+    def _fetch_yahoo_prices_fallback(
+        self,
+        symbol: str,
+        start_date: date,
+        end_date: date
+    ) -> List[Dict[str, Any]]:
+        """
+        Public fallback to Yahoo Finance chart API when FMP returns HTTP 402 (Subscription required).
+        """
+        import urllib.request
+        import json
+        from datetime import datetime, timezone
+        
+        # Yahoo expects tickers like VWCE.DE or BRK-B
+        clean_symbol = symbol.replace(".", "-") if not symbol.endswith(".DE") else symbol
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{clean_symbol}?interval=1d&range=1y"
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                result = data["chart"]["result"][0]
+                timestamps = result.get("timestamp", [])
+                closes = result["indicators"]["quote"][0].get("close", [])
+                currency = result.get("meta", {}).get("currency", "USD")
+                
+                records = []
+                for ts, close_val in zip(timestamps, closes):
+                    if close_val is not None:
+                        p_date = datetime.fromtimestamp(ts, tz=timezone.utc).date()
+                        if start_date <= p_date <= end_date:
+                            records.append({
+                                "ticker": symbol.upper(),
+                                "price_date": p_date,
+                                "close_price": Decimal(str(round(close_val, 4))),
+                                "currency": currency,
+                            })
+                return records
+        except Exception as exc:
+            logger.error(f"Yahoo Finance fallback failed for '{symbol}': {exc}")
+            return []
 
     def fetch_fx_rates(
         self,
