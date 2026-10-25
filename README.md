@@ -59,6 +59,7 @@ multi-asset-porfolio-analytics/
 ├── dags/
 │   ├── dag_transaction_ingestion.py# Airflow pipeline for CSV ingestion, validation & quarantine
 │   ├── dag_market_data_sync.py     # Airflow pipeline for stock prices, FX rates & gap filling
+│   ├── dag_portfolio_valuation.py  # Airflow pipeline for daily portfolio valuation & PnL
 │   └── src/
 │       ├── models/
 │       │   └── transaction.py      # Pydantic models for transactions and error codes
@@ -76,9 +77,12 @@ multi-asset-porfolio-analytics/
 │       │   ├── __init__.py         # Package identifier for analytics module
 │       │   └── valuation_engine.py # Portfolio accounting, cost basis, and PnL valuation engine
 │       └── tests/
-│           ├── test_validators.py  # Unit tests for transaction validation
-│           ├── test_market_data.py # Unit tests for API clients and sync engine
-│           └── test_lap_interpolator.py # Integration test for price gap filling
+│           ├── test_validators.py      # Unit tests for transaction validation
+│           ├── test_market_data.py     # Unit tests for API clients and sync engine
+│           ├── test_lap_interpolator.py# Integration test for price gap filling
+│           └── test_valuation_engine.py# Unit & integration tests for valuation engine
+├── superset/
+│   └── setup_superset.py           # Automated setup script for Superset DB connection & datasets
 └── input_data/
     └── .gitkeep                    # Folder where user places CSV reports (data files git-ignored)
 ```
@@ -125,7 +129,13 @@ Access points:
 - **Superset UI**: [http://localhost:8088](http://localhost:8088) (`admin` / `admin`)
 - **PostgreSQL**: `localhost:5432` (`portfolio_dwh`)
 
-### 4. Run Tests
+### 4. Initialize Superset BI Connection & Datasets
+Run the automated setup script to connect Superset to PostgreSQL and register presentation datasets:
+```bash
+docker exec -i portfolio_superset python < superset/setup_superset.py
+```
+
+### 5. Run Tests
 To run all automated tests inside the Docker container:
 ```bash
 docker exec -w /opt/airflow/dags portfolio_airflow python -m pytest src/tests/
