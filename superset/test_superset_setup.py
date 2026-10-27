@@ -26,6 +26,9 @@ EXPECTED_CHARTS = [
     "Top Gainers & Losers (Unrealised PnL)",
     "Currency & Regional Exposure",
     "Holdings Detail Table",
+    "Portfolio Drawdown (Underwater Analysis)",
+    "Dividend Yield on Cost per Ticker (%)",
+    "Profit Attribution: Capital Gain vs Dividends",
 ]
 EXPECTED_DASHBOARD = "Portfolio 360 Analytics"
 EXPECTED_DATASETS  = [
@@ -36,6 +39,9 @@ EXPECTED_DATASETS  = [
     "v_quarterly_dividends",
     "v_top_dividend_tickers",
     "v_currency_exposure",
+    "v_portfolio_drawdown",
+    "v_dividend_yield_on_cost",
+    "v_total_return_attribution",
 ]
 EXPECTED_DB_NAME   = "Portfolio DWH"
 
@@ -104,6 +110,8 @@ def run_tests():
         check(f"Dashboard '{EXPECTED_DASHBOARD}' exists", dash is not None)
 
         if dash:
+            import json
+
             check("Dashboard is published", dash.published is True)
             check(
                 "Dashboard has position_json",
@@ -114,6 +122,18 @@ def run_tests():
                 len(dash.slices) == len(EXPECTED_CHARTS),
                 f"found {len(dash.slices)} slices",
             )
+
+            # Native filters check
+            meta = json.loads(dash.json_metadata or "{}")
+            filters = meta.get("native_filter_configuration", [])
+            check("Dashboard has json_metadata", bool(meta))
+            check("Native filter configuration exists", len(filters) == 4, f"found {len(filters)} filters")
+            
+            filter_ids = [f.get("id") for f in filters]
+            check("Native filter 'Time Range' present", "NATIVE_FILTER-time-range" in filter_ids)
+            check("Native filter 'Asset Class' present", "NATIVE_FILTER-asset-class" in filter_ids)
+            check("Native filter 'Currency & Region' present", "NATIVE_FILTER-currency" in filter_ids)
+            check("Native filter 'Ticker Select' present", "NATIVE_FILTER-ticker" in filter_ids)
 
     print("\n" + "=" * 60)
     total = passed + len(failures)

@@ -3,7 +3,10 @@ Automated Apache Superset Setup Script.
 
 Connects Superset to the PostgreSQL Data Warehouse (presentation schema),
 registers analytical datasets, creates/updates high-readability investment charts
-with generous Y-axis margins (80px), area-fill growth, dividend analysis and currency exposure.
+and assembles them into an advanced 3-tab 'Portfolio 360 Analytics' executive dashboard:
+  - Tab 1: Executive Overview
+  - Tab 2: Holdings & Allocation (dynamic filtering with Asset Class, Currency, Ticker)
+  - Tab 3: Advanced Risk & Performance (Drawdown, Yield on Cost, Profit Attribution)
 
 Run inside the Superset container:
     docker exec -i portfolio_superset python < superset/setup_superset.py
@@ -30,6 +33,9 @@ DATASETS = [
     ("v_quarterly_dividends", "presentation"),
     ("v_top_dividend_tickers", "presentation"),
     ("v_currency_exposure", "presentation"),
+    ("v_portfolio_drawdown", "presentation"),
+    ("v_dividend_yield_on_cost", "presentation"),
+    ("v_total_return_attribution", "presentation"),
 ]
 
 DASHBOARD_TITLE = "Portfolio 360 Analytics"
@@ -37,12 +43,14 @@ DASHBOARD_TITLE = "Portfolio 360 Analytics"
 QUARTERLY_METRICS_DS = "v_quarterly_portfolio_metrics"
 DIVIDENDS_DS         = "v_quarterly_dividends"
 TOP_DIVIDENDS_DS     = "v_top_dividend_tickers"
-CURRENCY_DS          = "v_currency_exposure"
 LATEST_HOLDINGS_DS   = "v_latest_holdings"
+DRAWDOWN_DS          = "v_portfolio_drawdown"
+YIELD_ON_COST_DS     = "v_dividend_yield_on_cost"
+PROFIT_ATTR_DS       = "v_total_return_attribution"
 
 
 def _make_charts_spec():
-    """Return an updated list of chart specifications with 80px Y-axis margins and area styling."""
+    """Return an updated list of chart specifications for all 3 dashboard tabs."""
     return [
         # ── Tab 1: Executive Overview ────────────────────────────────────────
         (
@@ -281,13 +289,13 @@ def _make_charts_spec():
         (
             "Currency & Regional Exposure",
             "pie",
-            CURRENCY_DS,
+            LATEST_HOLDINGS_DS,
             {
                 "viz_type": "pie",
                 "groupby": ["currency_region"],
                 "metric": {
                     "expressionType": "SIMPLE",
-                    "column": {"column_name": "total_market_value_eur"},
+                    "column": {"column_name": "market_value_eur"},
                     "aggregate": "SUM",
                     "label": "Market Value (EUR)",
                 },
@@ -307,6 +315,8 @@ def _make_charts_spec():
                 "groupby": [],
                 "all_columns": [
                     "ticker",
+                    "asset_class",
+                    "currency_region",
                     "quantity",
                     "close_price_eur",
                     "market_value_eur",
@@ -320,16 +330,92 @@ def _make_charts_spec():
                 "include_time": False,
             },
         ),
+        # ── Tab 3: Advanced Risk & Performance ──────────────────────────────
+        (
+            "Portfolio Drawdown (Underwater Analysis)",
+            "echarts_timeseries_line",
+            DRAWDOWN_DS,
+            {
+                "viz_type": "echarts_timeseries_line",
+                "x_axis": "valuation_date",
+                "metrics": [
+                    {
+                        "expressionType": "SIMPLE",
+                        "column": {"column_name": "drawdown_pct"},
+                        "aggregate": "MIN",
+                        "label": "Drawdown from Peak (%)",
+                    }
+                ],
+                "time_range": "No filter",
+                "y_axis_format": ",.2f",
+                "y_axis_title": "Drawdown %",
+                "y_axis_title_margin": 65,
+                "left_margin": 80,
+                "rich_tooltip": True,
+                "show_legend": False,
+                "zoomable": True,
+                "area": True,
+                "opacity": 0.25,
+                "color_scheme": "d3Category20c",
+            },
+        ),
+        (
+            "Dividend Yield on Cost per Ticker (%)",
+            "echarts_timeseries_bar",
+            YIELD_ON_COST_DS,
+            {
+                "viz_type": "echarts_timeseries_bar",
+                "x_axis": "ticker",
+                "metrics": [
+                    {
+                        "expressionType": "SIMPLE",
+                        "column": {"column_name": "yield_on_cost_pct"},
+                        "aggregate": "MAX",
+                        "label": "Yield on Cost (%)",
+                    }
+                ],
+                "time_range": "No filter",
+                "show_legend": False,
+                "y_axis_format": ",.2f",
+                "y_axis_title": "Annual YoC %",
+                "y_axis_title_margin": 65,
+                "left_margin": 80,
+                "rich_tooltip": True,
+                "order_desc": True,
+                "row_limit": 15,
+            },
+        ),
+        (
+            "Profit Attribution: Capital Gain vs Dividends",
+            "pie",
+            PROFIT_ATTR_DS,
+            {
+                "viz_type": "pie",
+                "groupby": ["profit_component"],
+                "metric": {
+                    "expressionType": "SIMPLE",
+                    "column": {"column_name": "amount_eur"},
+                    "aggregate": "SUM",
+                    "label": "Profit Amount (EUR)",
+                },
+                "donut": True,
+                "innerRadius": 40,
+                "show_labels": True,
+                "show_legend": True,
+                "number_format": ",.2f",
+                "color_scheme": "supersetColors",
+            },
+        ),
     ]
 
 
 # ---------------------------------------------------------------------------
-# Dashboard layout
+# Dashboard layout (3 Tabs)
 # ---------------------------------------------------------------------------
 
 def _build_dashboard_layout(chart_ids: dict) -> dict:
     """
-    Build Superset dashboard position JSON with 2 tabs and generous dimensions.
+    Build Superset dashboard position JSON with 3 tabs and generous dimensions.
     """
     # Chart node IDs
     c_aum        = "CHART-aum"
@@ -344,6 +430,9 @@ def _build_dashboard_layout(chart_ids: dict) -> dict:
     c_gainloss   = "CHART-gainloss"
     c_curr       = "CHART-curr"
     c_table      = "CHART-table"
+    c_drawdown   = "CHART-drawdown"
+    c_yoc        = "CHART-yoc"
+    c_profit_att = "CHART-profit-att"
 
     # Row node IDs
     r_kpis     = "ROW-kpis"
@@ -352,10 +441,13 @@ def _build_dashboard_layout(chart_ids: dict) -> dict:
     r_top_div  = "ROW-top-div"
     r_alloc_gl = "ROW-alloc-gl"
     r_table    = "ROW-table"
+    r_dd       = "ROW-dd"
+    r_risk2    = "ROW-risk2"
 
     # Tab node IDs
     tab1 = "TAB-overview"
     tab2 = "TAB-holdings"
+    tab3 = "TAB-risk"
     tabs = "TABS-root"
 
     layout = {
@@ -371,7 +463,7 @@ def _build_dashboard_layout(chart_ids: dict) -> dict:
     layout[tabs] = {
         "type": "TABS",
         "id": tabs,
-        "children": [tab1, tab2],
+        "children": [tab1, tab2, tab3],
         "parents": ["ROOT_ID"],
     }
 
@@ -458,6 +550,36 @@ def _build_dashboard_layout(chart_ids: dict) -> dict:
         "parents": [tab2],
     }
     layout[c_table] = {"type": "CHART", "id": c_table, "children": [], "meta": {"chartId": chart_ids["Holdings Detail Table"], "width": 12, "height": 44}, "parents": [r_table]}
+
+    # ── Tab 3: Advanced Risk & Performance ───────────────────────────────────
+    layout[tab3] = {
+        "type": "TAB",
+        "id": tab3,
+        "children": [r_dd, r_risk2],
+        "meta": {"text": "Advanced Risk & Performance", "defaultText": "Advanced Risk & Performance"},
+        "parents": [tabs],
+    }
+
+    # Row 1: Portfolio Drawdown (full width 12, height 38)
+    layout[r_dd] = {
+        "type": "ROW",
+        "id": r_dd,
+        "children": [c_drawdown],
+        "meta": {"background": "BACKGROUND_TRANSPARENT"},
+        "parents": [tab3],
+    }
+    layout[c_drawdown] = {"type": "CHART", "id": c_drawdown, "children": [], "meta": {"chartId": chart_ids["Portfolio Drawdown (Underwater Analysis)"], "width": 12, "height": 38}, "parents": [r_dd]}
+
+    # Row 2: Yield on Cost (width 8) + Profit Attribution (width 4), height 40
+    layout[r_risk2] = {
+        "type": "ROW",
+        "id": r_risk2,
+        "children": [c_yoc, c_profit_att],
+        "meta": {"background": "BACKGROUND_TRANSPARENT"},
+        "parents": [tab3],
+    }
+    layout[c_yoc]        = {"type": "CHART", "id": c_yoc,        "children": [], "meta": {"chartId": chart_ids["Dividend Yield on Cost per Ticker (%)"],        "width": 8, "height": 40}, "parents": [r_risk2]}
+    layout[c_profit_att] = {"type": "CHART", "id": c_profit_att, "children": [], "meta": {"chartId": chart_ids["Profit Attribution: Capital Gain vs Dividends"], "width": 4, "height": 40}, "parents": [r_risk2]}
 
     return layout
 
@@ -555,9 +677,135 @@ def upsert_charts(datasource_map):
     return chart_ids
 
 
-def upsert_dashboard(chart_ids: dict):
+def _build_native_filters(datasource_map: dict) -> list:
     """
-    Creates or updates the 'Portfolio 360 Analytics' dashboard with new layout and slices.
+    Constructs Native Dashboard Filters configuration for Superset:
+    1. Time Range Filter (scoped to time-series datasets)
+    2. Asset Class Filter (Stocks vs REITs vs ETFs)
+    3. Currency & Region Filter (USD vs EUR)
+    4. Ticker Filter (multi-select on latest holdings)
+    """
+    quarterly_ds = datasource_map.get(QUARTERLY_METRICS_DS)
+    latest_ds = datasource_map.get(LATEST_HOLDINGS_DS)
+
+    filters = [
+        {
+            "id": "NATIVE_FILTER-time-range",
+            "name": "Time Range",
+            "filterType": "filter_time",
+            "targets": [
+                {
+                    "datasetId": quarterly_ds.id if quarterly_ds else None,
+                    "column": {"name": "quarter_start"},
+                }
+            ],
+            "defaultDataMask": {
+                "extraFormData": {
+                    "time_range": "No filter"
+                },
+                "filterState": {
+                    "value": "No filter"
+                }
+            },
+            "controlObject": {
+                "enableEmptyFilter": True,
+            },
+            "cascadeParentIds": [],
+            "scope": {
+                "rootPath": ["ROOT_ID"],
+                "excluded": []
+            },
+            "isInstant": True,
+        },
+        {
+            "id": "NATIVE_FILTER-asset-class",
+            "name": "Asset Class",
+            "filterType": "filter_select",
+            "targets": [
+                {
+                    "datasetId": latest_ds.id if latest_ds else None,
+                    "column": {"name": "asset_class"},
+                }
+            ],
+            "defaultDataMask": {
+                "extraFormData": {},
+                "filterState": {}
+            },
+            "controlObject": {
+                "multiSelect": True,
+                "enableEmptyFilter": True,
+                "inverseSelection": False,
+                "defaultToFirstItem": False,
+            },
+            "cascadeParentIds": [],
+            "scope": {
+                "rootPath": ["ROOT_ID"],
+                "excluded": []
+            },
+            "isInstant": True,
+        },
+        {
+            "id": "NATIVE_FILTER-currency",
+            "name": "Currency & Region",
+            "filterType": "filter_select",
+            "targets": [
+                {
+                    "datasetId": latest_ds.id if latest_ds else None,
+                    "column": {"name": "currency_region"},
+                }
+            ],
+            "defaultDataMask": {
+                "extraFormData": {},
+                "filterState": {}
+            },
+            "controlObject": {
+                "multiSelect": True,
+                "enableEmptyFilter": True,
+                "inverseSelection": False,
+                "defaultToFirstItem": False,
+            },
+            "cascadeParentIds": [],
+            "scope": {
+                "rootPath": ["ROOT_ID"],
+                "excluded": []
+            },
+            "isInstant": True,
+        },
+        {
+            "id": "NATIVE_FILTER-ticker",
+            "name": "Select Ticker(s)",
+            "filterType": "filter_select",
+            "targets": [
+                {
+                    "datasetId": latest_ds.id if latest_ds else None,
+                    "column": {"name": "ticker"},
+                }
+            ],
+            "defaultDataMask": {
+                "extraFormData": {},
+                "filterState": {}
+            },
+            "controlObject": {
+                "multiSelect": True,
+                "enableEmptyFilter": True,
+                "inverseSelection": False,
+                "defaultToFirstItem": False,
+            },
+            "cascadeParentIds": [],
+            "scope": {
+                "rootPath": ["ROOT_ID"],
+                "excluded": []
+            },
+            "isInstant": True,
+        }
+    ]
+    return filters
+
+
+def upsert_dashboard(chart_ids: dict, datasource_map: dict):
+    """
+    Creates or updates the 'Portfolio 360 Analytics' dashboard with new layout, slices,
+    and native filters across 3 tabs.
     """
     from superset import db
     from superset.models.dashboard import Dashboard
@@ -571,24 +819,36 @@ def upsert_dashboard(chart_ids: dict):
         .all()
     )
 
+    native_filters = _build_native_filters(datasource_map)
+    json_metadata = {
+        "native_filter_configuration": native_filters,
+        "color_scheme": "supersetColors",
+        "refresh_frequency": 0,
+        "expanded_slices": {},
+        "label_colors": {},
+        "timed_refresh_immune_slices": [],
+    }
+
     existing = db.session.query(Dashboard).filter_by(dashboard_title=DASHBOARD_TITLE).first()
     if existing:
         existing.position_json = json.dumps(position_json)
+        existing.json_metadata = json.dumps(json_metadata)
         existing.slices = slices
         existing.published = True
         db.session.commit()
-        logger.info(f"Dashboard '{DASHBOARD_TITLE}' updated (ID: {existing.id}).")
+        logger.info(f"Dashboard '{DASHBOARD_TITLE}' updated across 3 tabs with Native Filters (ID: {existing.id}).")
         return existing
     else:
         dashboard = Dashboard(
             dashboard_title=DASHBOARD_TITLE,
             position_json=json.dumps(position_json),
+            json_metadata=json.dumps(json_metadata),
             slices=slices,
             published=True,
         )
         db.session.add(dashboard)
         db.session.commit()
-        logger.info(f"Dashboard '{DASHBOARD_TITLE}' created (ID: {dashboard.id}).")
+        logger.info(f"Dashboard '{DASHBOARD_TITLE}' created across 3 tabs with Native Filters (ID: {dashboard.id}).")
         return dashboard
 
 
@@ -600,7 +860,7 @@ def main():
         _database, datasource_map = setup_database_and_datasets()
         chart_ids = upsert_charts(datasource_map)
         logger.info(f"Charts configured: {len(chart_ids)}  {list(chart_ids.keys())}")
-        dashboard = upsert_dashboard(chart_ids)
+        dashboard = upsert_dashboard(chart_ids, datasource_map)
 
         logger.info("=" * 60)
         logger.info("Superset configuration successfully updated!")

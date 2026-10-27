@@ -102,13 +102,16 @@ The PostgreSQL database is organized into 3 clear layers:
    * `core.fx_rates`: Daily currency exchange rates.
    * `core.broker_reports`: Status of processed CSV report files.
 3. **`presentation`**: Ready-to-use tables and analytical views for Superset dashboards:
-   * `presentation.daily_portfolio_metrics`: Daily total portfolio value, invested cost, returns, and PnL.
+   * `presentation.daily_portfolio_metrics`: Daily total portfolio value, invested cost, returns and PnL.
    * `presentation.daily_holdings`: Daily position details for each stock/ETF held.
-   * `presentation.v_quarterly_portfolio_metrics`: Quarterly aggregated valuations, PnL, and percentage returns.
+   * `presentation.v_quarterly_portfolio_metrics`: Quarterly aggregated valuations, PnL and percentage returns.
    * `presentation.v_quarterly_dividends`: Quarterly cashflow metrics from broker dividend payments.
    * `presentation.v_top_dividend_tickers`: Ranking of stocks generating highest cumulative dividend income.
    * `presentation.v_currency_exposure`: Asset valuation split by currency/regional exposure (USD vs EUR).
-   * `presentation.v_latest_holdings`: Latest portfolio holdings snapshot at market-priced valuation date.
+   * `presentation.v_latest_holdings`: Latest portfolio holdings snapshot at market-priced valuation date with asset class and regional tagging.
+   * `presentation.v_portfolio_drawdown`: Historical peak-to-trough drawdown (%) tracking portfolio risk over time.
+   * `presentation.v_dividend_yield_on_cost`: Dividend Yield on Cost (YoC %) per ticker based on historical acquisition cost.
+   * `presentation.v_total_return_attribution`: Decomposition of total portfolio profit into capital gains vs cash dividends.
 
 ---
 
@@ -137,7 +140,7 @@ Access points:
 
 ### 4. Initialize Superset BI Connection, Datasets, Charts & Dashboard
 Run the automated setup script to connect Superset to PostgreSQL, register presentation datasets,
-create 8 analytical charts and assemble them into the **Portfolio 360 Analytics** dashboard (2 tabs):
+create 15 analytical charts and assemble them into the **Portfolio 360 Analytics** dashboard across 3 tabs with 4 native interactive filters (Time Range, Asset Class, Currency & Region and Ticker Select):
 ```bash
 docker exec -i portfolio_superset python < superset/setup_superset.py
 ```
@@ -148,7 +151,7 @@ Open the dashboard at: [http://localhost:8088/superset/dashboard/1/](http://loca
 ```bash
 docker exec -i portfolio_superset python < superset/test_superset_setup.py
 ```
-Expected output: `Results: 33/33 tests passed, 0 failed.`
+Expected output: `Results: 48/48 tests passed, 0 failed.`
 
 ### 5. Run Tests
 To run all automated tests inside the Docker container:
