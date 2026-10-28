@@ -82,8 +82,10 @@ multi-asset-porfolio-analytics/
 │           ├── test_lap_interpolator.py# Integration test for price gap filling
 │           └── test_valuation_engine.py# Unit & integration tests for valuation engine
 ├── superset/
-│   ├── setup_superset.py           # Automated setup: DB connection, datasets, 8 charts & dashboard
-│   └── test_superset_setup.py      # Verification tests for Superset configuration (19 assertions)
+│   ├── setup_superset.py           # Automated setup: DB connection, datasets, 15 charts & 3-tab dashboard
+│   ├── test_superset_setup.py      # Verification tests for Superset configuration (48 assertions)
+│   └── dashboards/
+│       └── portfolio_360_analytics_export.zip # Complete Dashboard as Code export bundle (ZIP/YAML)
 └── input_data/
     └── .gitkeep                    # Folder where user places CSV reports (data files git-ignored)
 ```
@@ -115,6 +117,44 @@ The PostgreSQL database is organized into 3 clear layers:
 
 ---
 
+## Business Intelligence & Analytics: Portfolio 360 Dashboard
+
+The platform features an automated, enterprise-grade executive dashboard in **Apache Superset** structured across **3 dedicated analytical tabs** with **15 specialized investment visualizations** and **4 native interactive filters**.
+
+```text
+Portfolio 360 Analytics Dashboard
+├── Tab 1: Executive Overview
+│   ├── KPI Cards: Total AUM, Invested Cost Basis, Total Return (EUR), Total Return (%)
+│   ├── Portfolio Growth: AUM vs Cost Basis (Area Chart with shaded capital gains)
+│   ├── Quarterly PnL Performance (Profit / Loss per calendar quarter)
+│   ├── Quarterly Dividend Cashflow (Passive income quarterly distributions)
+│   └── Top Dividend Generating Stocks (Historical dividend income leaders)
+├── Tab 2: Holdings & Allocation
+│   ├── Top 10 Holdings by Market Value (Ranked position sizes in EUR)
+│   ├── Top Gainers & Losers (Unrealised PnL ranking across all portfolio stocks)
+│   ├── Currency & Regional Exposure (USD vs EUR allocation pie/donut)
+│   └── Holdings Detail Table (Full tabular snapshot with sort, search & pagination)
+└── Tab 3: Advanced Risk & Performance
+    ├── Portfolio Drawdown / Underwater Analysis (% decline from historical all-time peak)
+    ├── Dividend Yield on Cost per Ticker (Annualized dividend yield relative to acquisition cost)
+    └── Profit Attribution (Decomposition of total returns: Capital Gains vs Cash Dividends)
+```
+
+### Native Dashboard Filters (Side Filter Bar)
+* **Time Range**: Dynamically filters time-series charts across custom or pre-set horizons (Last Year, Last 3 Years, etc.).
+* **Asset Class**: Multi-select filter isolating `Stocks`, `REITs (Real Estate)`, or `ETFs`.
+* **Currency & Region**: Filters assets by denomination/geography (`USD (United States)` vs `EUR (Europe)`).
+* **Select Ticker(s)**: Multi-select dropdown filtering all asset-level charts to specific companies.
+
+### Key Financial Metrics Explained
+* **Total AUM (Assets Under Management)**: Total market value of all held assets converted to base currency (EUR) using daily ECB FX rates.
+* **Cost Basis**: Total capital actually invested in acquiring active positions (using weighted average cost basis accounting).
+* **Peak-to-Trough Drawdown (%)**: Measures the maximum percentage drop from the portfolio's highest historical valuation. Low drawdown (e.g. -8.14%) demonstrates defensive portfolio resilience.
+* **Yield on Cost (YoC %)**: Annual dividend payouts divided by initial purchase cost, illustrating the growing yield of long-held dividend growth stocks.
+* **Profit Attribution**: Breaks down overall profits into market price appreciation vs realized cash dividend payments.
+
+---
+
 ## How to Run the Project
 
 ### 1. Prerequisites
@@ -139,15 +179,23 @@ Access points:
 - **PostgreSQL**: `localhost:5432` (`portfolio_dwh`)
 
 ### 4. Initialize Superset BI Connection, Datasets, Charts & Dashboard
+
+#### Option A: Automated Provisioning via Python (Recommended)
 Run the automated setup script to connect Superset to PostgreSQL, register presentation datasets,
-create 15 analytical charts and assemble them into the **Portfolio 360 Analytics** dashboard across 3 tabs with 4 native interactive filters (Time Range, Asset Class, Currency & Region and Ticker Select):
+create 15 analytical charts and assemble them into the **Portfolio 360 Analytics** dashboard across 3 tabs with 4 native interactive filters (Time Range, Asset Class, Currency & Region, and Ticker Select):
 ```bash
 docker exec -i portfolio_superset python < superset/setup_superset.py
 ```
 
 Open the dashboard at: [http://localhost:8088/superset/dashboard/1/](http://localhost:8088/superset/dashboard/1/)
 
-#### Verify the setup (optional)
+#### Option B: Native Dashboard Import (Dashboard as Code)
+You can also import the pre-built dashboard bundle directly via the Superset UI:
+1. Navigate to **Dashboards** in Superset.
+2. Click **Import Dashboards** (top right icon).
+3. Select and upload `superset/dashboards/portfolio_360_analytics_export.zip`.
+
+#### Verify the setup
 ```bash
 docker exec -i portfolio_superset python < superset/test_superset_setup.py
 ```
