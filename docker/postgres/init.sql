@@ -111,3 +111,144 @@ CREATE INDEX IF NOT EXISTS idx_tx_date_ticker ON core.transaction_events(transac
 CREATE INDEX IF NOT EXISTS idx_quarantine_file ON core.quarantine_records(file_id);
 CREATE INDEX IF NOT EXISTS idx_asset_prices_date ON core.asset_prices(price_date);
 CREATE INDEX IF NOT EXISTS idx_fx_rates_date ON core.fx_rates(rate_date);
+
+-- View: presentation.v_latest_holdings
+CREATE OR REPLACE VIEW presentation.v_latest_holdings AS
+SELECT 
+    h.valuation_date,
+    h.ticker,
+    CASE 
+        WHEN h.ticker LIKE '%.DE' THEN 'ETFs'
+        WHEN h.ticker IN ('O', 'VICI', 'NNN', 'HRZN', 'DLR', 'SPG', 'NLY', 'AMT', 'NYMT') THEN 'REITs'
+        ELSE 'Stocks'
+    END AS asset_class,
+    CASE 
+        WHEN h.ticker LIKE '%.DE' THEN 'EUR (Europe)'
+        ELSE 'USD (United States)'
+    END AS currency_region,
+    h.quantity,
+    h.close_price_eur,
+    h.market_value_eur,
+    h.cost_basis_eur,
+    h.unrealized_pl_eur,
+    h.unrealized_pl_pct
+FROM presentation.daily_holdings h
+WHERE h.valuation_date = (SELECT MAX(price_date) FROM core.asset_prices);
+
+-- View: presentation.v_currency_exposure
+CREATE OR REPLACE VIEW presentation.v_currency_exposure AS
+SELECT 
+    currency_region,
+    ROUND(SUM(market_value_eur), 2) AS total_market_value_eur
+FROM presentation.v_latest_holdings
+WHERE quantity > 0
+GROUP BY 1
+ORDER BY total_market_value_eur DESC;
+
+
+-- View: presentation.v_quarterly_portfolio_metrics
+CREATE OR REPLACE VIEW presentation.v_quarterly_portfolio_metrics AS
+WITH quarterly_eom AS (
+    SELECT 
+        DATE_TRUNC('quarter', valuation_date)::DATE AS quarter_start,
+        MAX(valuation_date) AS eoq_date,
+        SUM(daily_pl_eur) AS quarterly_pl_eur
+    FROM presentation.daily_portfolio_metrics
+    WHERE valuation_date <= (SELECT MAX(price_date) FROM core.asset_prices)
+    GROUP BY DATE_TRUNC('quarter', valuation_date)
+)
+SELECT 
+    q.quarter_start,
+    q.eoq_date AS valuation_date,
+    TO_CHAR(q.quarter_start, 'YYYY-\"Q\"Q') AS quarter_label,
+    p.total_aum_eur,
+    p.cost_basis_eur,
+    p.total_return_eur,
+    ROUND(p.total_return_pct, 2) AS total_return_pct,
+    q.quarterly_pl_eur
+FROM quarterly_eom q
+JOIN presentation.daily_portfolio_metrics p ON p.valuation_date = q.eoq_date
+ORDER BY q.quarter_start;
+
+-- View: presentation.v_quarterly_dividends
+CREATE OR REPLACE VIEW presentation.v_quarterly_dividends AS
+SELECT 
+    DATE_TRUNC('quarter', transaction_date)::DATE AS quarter_start,
+    TO_CHAR(DATE_TRUNC('quarter', transaction_date), 'YYYY-\"Q\"Q') AS quarter_label,
+    ROUND(SUM(quantity * unit_price_amount), 2) AS dividend_amount_eur
+FROM core.transaction_events
+WHERE type = 'DIVIDEND' AND transaction_date <= '2024-06-30'
+GROUP BY DATE_TRUNC('quarter', transaction_date)
+ORDER BY quarter_start;
+
+-- View: presentation.v_top_dividend_tickers
+CREATE OR REPLACE VIEW presentation.v_top_dividend_tickers AS
+SELECT 
+    UPPER(ticker) AS ticker,
+    ROUND(SUM(quantity * unit_price_amount), 2) AS total_dividends_eur,
+    COUNT(*) AS dividend_payout_count
+FROM core.transaction_events
+WHERE type = 'DIVIDEND'
+GROUP BY UPPER(ticker)
+ORDER BY total_dividends_eur DESC;
+
+-- View: presentation.v_portfolio_drawdown
+CREATE OR REPLACE VIEW presentation.v_portfolio_drawdown AS
+WITH daily_peaks AS (
+    SELECT 
+        valuation_date,
+        total_aum_eur,
+        MAX(total_aum_eur) OVER (ORDER BY valuation_date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS peak_aum_eur
+    FROM presentation.daily_portfolio_metrics
+    WHERE valuation_date <= (SELECT MAX(price_date) FROM core.asset_prices)
+)
+SELECT 
+    valuation_date,
+    total_aum_eur,
+    peak_aum_eur,
+    ROUND(((total_aum_eur - peak_aum_eur) / NULLIF(peak_aum_eur, 0)) * 100, 2) AS drawdown_pct
+FROM daily_peaks
+ORDER BY valuation_date;
+
+-- View: presentation.v_dividend_yield_on_cost
+CREATE OR REPLACE VIEW presentation.v_dividend_yield_on_cost AS
+WITH div_summary AS (
+    SELECT 
+        UPPER(ticker) AS ticker,
+        SUM(quantity * unit_price_amount) AS total_dividends_eur,
+        ROUND(SUM(quantity * unit_price_amount) / 4.0, 2) AS annual_dividend_eur
+    FROM core.transaction_events
+    WHERE type = 'DIVIDEND'
+    GROUP BY UPPER(ticker)
+)
+SELECT 
+    h.ticker,
+    h.asset_class,
+    h.cost_basis_eur,
+    h.market_value_eur,
+    d.total_dividends_eur,
+    d.annual_dividend_eur,
+    ROUND((d.annual_dividend_eur / NULLIF(h.cost_basis_eur, 0)) * 100, 2) AS yield_on_cost_pct
+FROM presentation.v_latest_holdings h
+JOIN div_summary d ON d.ticker = h.ticker
+WHERE h.quantity > 0 AND h.cost_basis_eur > 0
+ORDER BY yield_on_cost_pct DESC;
+
+-- View: presentation.v_total_return_attribution
+CREATE OR REPLACE VIEW presentation.v_total_return_attribution AS
+SELECT 
+    'Unrealised Capital Gain' AS profit_component,
+    ROUND(SUM(unrealized_pl_eur), 2) AS amount_eur
+FROM presentation.v_latest_holdings
+UNION ALL
+SELECT 
+    'Cash Dividends Received' AS profit_component,
+    ROUND(SUM(quantity * unit_price_amount), 2) AS amount_eur
+FROM core.transaction_events
+WHERE type = 'DIVIDEND';
+
+
+
+
+
+
